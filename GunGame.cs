@@ -24,7 +24,7 @@ namespace NightFish.GunGame
         float NorthWall = 50;
         float SouthWall = -50;
 
-        int ResetDelay = 60;
+        int ResetDelay = 30;
 
         int MagRemoveCount = 0;
 
