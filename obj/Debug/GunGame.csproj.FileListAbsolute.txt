@@ -1,0 +1,11 @@
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\bin\Debug\GunGame.dll
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\bin\Debug\GunGame.pdb
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\bin\Debug\Assembly-CSharp-firstpass.dll
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\bin\Debug\Assembly-CSharp.dll
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\bin\Debug\Rocket.API.dll
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\bin\Debug\Rocket.Core.dll
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\bin\Debug\Rocket.Unturned.dll
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\bin\Debug\UnityEngine.dll
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\obj\Debug\GunGame.dll
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\obj\Debug\GunGame.pdb
+D:\Users\nightfish\Documents\Visual Studio 2015\Projects\PurgeNetworkGunGame\PurgeNetworkGunGame\obj\Debug\GunGame.csprojResolveAssemblyReference.cache
