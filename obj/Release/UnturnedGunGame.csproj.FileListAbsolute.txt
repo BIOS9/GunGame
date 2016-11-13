@@ -1,0 +1,11 @@
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\obj\Release\UnturnedGunGame.csprojResolveAssemblyReference.cache
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\bin\Release\Rocket.API.dll
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\bin\Release\Rocket.Core.dll
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\bin\Release\Rocket.Unturned.dll
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\bin\Release\Assembly-CSharp-firstpass.dll
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\bin\Release\Assembly-CSharp.dll
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\bin\Release\UnityEngine.dll
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\bin\Release\GunGame.dll
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\bin\Release\GunGame.pdb
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\obj\Release\GunGame.dll
+d:\users\nightfish\documents\visual studio 2015\Projects\UnturnedGunGame\UnturnedGunGame\obj\Release\GunGame.pdb

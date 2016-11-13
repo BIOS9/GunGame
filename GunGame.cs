@@ -24,13 +24,25 @@ namespace NightFish.GunGame
         float NorthWall = 50;
         float SouthWall = -50;
 
+        float WallEndY = 80;
+        float WallStartY = 30;
+
+        ushort WallBarricade = 1091;
+
+        double WallBarricadeWidth = 3.75;
+        double WallBarricadeHeight = 3.75;
+
+        bool disableClearing = false;
+
+        bool disableWallGen = false;
+
         int ResetDelay = 30;
 
         int MagRemoveCount = 0;
 
         bool error = false;
-        
-        List<int> weapons = new List<int>() {107,1021,99,1039,448,1369,1379,1041,116,1024,1377,484,1000,363,1375,122,1362,297,1382,112,132,1364};
+
+        List<int> weapons = new List<int>() { 107, 1021, 99, 1039, 448, 1369, 1379, 1041, 116, 1024, 1377, 484, 1000, 363, 1375, 122, 1362, 297, 1382, 112, 132, 1364 };
 
         Dictionary<ulong, int> gungameLevels = new Dictionary<ulong, int>();
         Dictionary<ulong, int> killstreak = new Dictionary<ulong, int>();
@@ -47,7 +59,7 @@ namespace NightFish.GunGame
 
         DateTime lastBorderCheck = DateTime.Now;
         DateTime lastOPCheck = DateTime.Now;
-       
+
         public override TranslationList DefaultTranslations
         {
             get
@@ -65,16 +77,17 @@ namespace NightFish.GunGame
                     {"ROUND_START", "ROUND STARTED!"},
                     {"VEH_CLR", "Cleared Vehicles"},
                     {"STRUCT_CLR", "Cleared Structures"},
+                    {"WP_LIST_GEN", "Generated weapons list..."},
                     {"BARRIC_CLR", "Cleared barricades"},
                     {"ITEM_CLR", "Cleared Player Items"},
                     {"VEH_KICK", "Removed Players From Vehicles"},
                     {"LVL_RESET", "Reset Gun Game Levels"},
                     {"WALL_REBUILD", "Rebuilt Arena Wall"},
-                    {"WP_LIST_GEN","Generated weapon list."},
                     {"LVL_STEAL","{0} has stolen a level from {1}!"},
                     {"PLAYER_KILL","{0} has killed {1}!"},
                     {"KILLSTREAK","{0} has a kill streak of {1}!"},
                     {"KILLSTREAK_END","{0} has ended {1}'s kill streak of {2}"},
+                    {"WALL_REBUILD_DISABLED","Arena wall build disabled... Skipping..."},
                 };
             }
         }
@@ -99,7 +112,20 @@ namespace NightFish.GunGame
                 writer.WriteElementString("EastWall", EastWall.ToString());
                 writer.WriteElementString("SouthWall", SouthWall.ToString());
                 writer.WriteElementString("NorthWall", NorthWall.ToString());
+                writer.WriteComment("The settings below are to ajust the height and vertical location of the wall.");
+                writer.WriteElementString("WallStartY", WallStartY.ToString());
+                writer.WriteElementString("WallEndY", WallEndY.ToString());
+                writer.WriteComment("The settings below are to customize the material that the wall is made of. The dimensions of the barricade is important. You can get some pretty interesting effects by modifying the width and height, try it.");
+                writer.WriteComment("Width and height of large plates is: 3.75");
+                writer.WriteComment("Width and height of small plates is: 2.0");
+                writer.WriteElementString("WallBarricadeWidth", WallBarricadeWidth.ToString());
+                writer.WriteElementString("WallBarricadeHeight", WallBarricadeHeight.ToString());
+                writer.WriteElementString("WallBarricadeID", WallBarricade.ToString());
+                writer.WriteComment("The following setting will disable the generation of the arena wall. Players will still not be able to leave.");
+                writer.WriteElementString("DisableWall", disableWallGen.ToString());
                 writer.WriteEndElement();
+                writer.WriteComment("The following setting will disable clearing barricades and structures. This setting should not be enabled while re-building walls is enabled because it will create walls on top of existing walls and cause lag.");
+                writer.WriteElementString("DisableClear", disableWallGen.ToString());
 
                 writer.WriteStartElement("Weapons");
                 foreach (int w in weapons)
@@ -117,34 +143,7 @@ namespace NightFish.GunGame
         {
             if (!File.Exists(@"plugins\gungame\GunGameConfig.xml"))
             {
-                XmlWriterSettings xset = new XmlWriterSettings();
-                xset.Indent = true;
-                xset.NewLineOnAttributes = true;
-
-                using (XmlWriter writer = XmlWriter.Create(@"plugins\gungame\GunGameConfig.xml", xset))
-                {
-                    writer.WriteStartDocument();
-                    writer.WriteStartElement("GunGameConfiguration");
-                    writer.WriteElementString("TimeBetweenRounds", ResetDelay.ToString());
-                    writer.WriteStartElement("Border");
-                    writer.WriteComment("North wall must be bigger than South wall!");
-                    writer.WriteComment("East wall must be bigger than West wall!");
-                    writer.WriteElementString("WestWall", WestWall.ToString());
-                    writer.WriteElementString("EastWall", EastWall.ToString());
-                    writer.WriteElementString("SouthWall", SouthWall.ToString());
-                    writer.WriteElementString("NorthWall", NorthWall.ToString());
-                    writer.WriteEndElement();
-
-                    writer.WriteStartElement("Weapons");
-                    foreach(int w in weapons)
-                    {
-                        writer.WriteElementString("Weapon", w.ToString());
-                    }
-                    writer.WriteEndElement();
-
-                    writer.WriteEndElement();
-                    writer.WriteEndDocument();
-                }
+                saveXML();
             }
             else
             {
@@ -199,17 +198,66 @@ namespace NightFish.GunGame
                                         ResetDelay = Convert.ToInt32(reader.Value.Trim());
                                     }
                                     break;
+                                case "WallStartY":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Wall Y pos start: " + reader.Value.Trim());
+                                        WallStartY = (float)Convert.ToDouble(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "WallEndY":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Wall Y pos end: " + reader.Value.Trim());
+                                        WallEndY = (float)Convert.ToDouble(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "DisableWall":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Disable wall generation: " + reader.Value.Trim());
+                                        disableWallGen = Convert.ToBoolean(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "WallBarricadeWidth":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Wall barricade width: " + reader.Value.Trim());
+                                        WallBarricadeWidth = Convert.ToDouble(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "WallBarricadeHeight":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Wall barricade height: " + reader.Value.Trim());
+                                        WallBarricadeHeight = Convert.ToDouble(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "WallBarricadeID":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Wall barricade ID: " + reader.Value.Trim());
+                                        WallBarricade = Convert.ToUInt16(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "DisableClear":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Disable barricade/structure clearing: " + reader.Value.Trim());
+                                        disableClearing = Convert.ToBoolean(reader.Value.Trim());
+                                    }
+                                    break;
                             }
                         }
                     }
                 }
 
-                if(EastWall <= WestWall)
+                if (EastWall <= WestWall)
                 {
                     Logger.LogError("East wall must be bigger than West wall! Please fix this error to continue!");
                     error = true;
                 }
-                if(NorthWall <= SouthWall)
+                if (NorthWall <= SouthWall)
                 {
                     Logger.LogError("North wall must be bigger than South wall! Please fix this error to continue!");
                     error = true;
@@ -219,6 +267,7 @@ namespace NightFish.GunGame
             Rocket.Unturned.Events.UnturnedPlayerEvents.OnPlayerDeath += PlayerDeath;
             Rocket.Unturned.Events.UnturnedPlayerEvents.OnPlayerRevive += PlayerRespawn;
             U.Events.OnPlayerConnected += PlayerJoin;
+            
             GenerateWeaponList();
             gungameLevels.Clear();
             killstreak.Clear();
@@ -289,7 +338,7 @@ namespace NightFish.GunGame
                     }
                     killstreak.Add(killer.CSteamID.m_SteamID, ks + 1);
 
-                    if(ks == 2)
+                    if (ks == 2)
                     {
                         if (!OP.ContainsKey(killer.CSteamID.m_SteamID))
                         {
@@ -422,30 +471,41 @@ namespace NightFish.GunGame
         {
             if (error == true)
                 return;
-            BarricadeManager.askClearAllBarricades();
-            StructureManager.askClearAllStructures();
-            Logger.LogWarning(DefaultTranslations.Translate("BARRIC_CLR"));
-            Logger.LogWarning(DefaultTranslations.Translate("STRUCT_CLR"));
-            Transform tr = new GameObject().transform;
-            Vector3 pos = new Vector3(0, 100, 0);
-            for (float y = 38; y < 80; y += (float)3.75)
+            if (!disableClearing)
             {
-                for (float z = SouthWall; z < NorthWall + 3.75; z += (float)3.75)
-                {
-                    pos = new Vector3(WestWall, y, z);
-                    BarricadeManager.dropBarricade(new Barricade(1091), tr, pos, 0, 90, 0, 000, 000);
-                    pos = new Vector3(EastWall, y, z);
-                    BarricadeManager.dropBarricade(new Barricade(1091), tr, pos, 0, 90, 0, 000, 000);
-                }
-                for (float x = WestWall; x < EastWall + 3.75; x += (float)3.75)
-                {
-                    pos = new Vector3(x, y, SouthWall);
-                    BarricadeManager.dropBarricade(new Barricade(1091), tr, pos, 0, 0, 0, 000, 000);
-                    pos = new Vector3(x, y, NorthWall);
-                    BarricadeManager.dropBarricade(new Barricade(1091), tr, pos, 0, 0, 0, 000, 000);
-                }
+                BarricadeManager.askClearAllBarricades();
+                StructureManager.askClearAllStructures();
+                Logger.LogWarning(DefaultTranslations.Translate("BARRIC_CLR"));
+                Logger.LogWarning(DefaultTranslations.Translate("STRUCT_CLR"));
             }
-            Logger.LogWarning(DefaultTranslations.Translate("WALL_REBUILD"));
+            if (!disableWallGen)
+            {
+                Barricade b = new Barricade(WallBarricade);
+                Transform tr = new GameObject().transform;
+                Vector3 pos = new Vector3(0, 100, 0);
+                for (float y = WallStartY; y < WallEndY; y += (float)WallBarricadeHeight)
+                {
+                    for (float z = SouthWall; z < NorthWall + WallBarricadeWidth; z += (float)WallBarricadeWidth)
+                    {
+                        pos = new Vector3(WestWall, y, z);
+                        BarricadeManager.dropBarricade(b, tr, pos, 0, 90, 0, 000, 000);
+                        pos = new Vector3(EastWall, y, z);
+                        BarricadeManager.dropBarricade(b, tr, pos, 0, 90, 0, 000, 000);
+                    }
+                    for (float x = WestWall; x < EastWall + WallBarricadeWidth; x += (float)WallBarricadeWidth)
+                    {
+                        pos = new Vector3(x, y, SouthWall);
+                        BarricadeManager.dropBarricade(b, tr, pos, 0, 0, 0, 000, 000);
+                        pos = new Vector3(x, y, NorthWall);
+                        BarricadeManager.dropBarricade(b, tr, pos, 0, 0, 0, 000, 000);
+                    }
+                }
+                Logger.LogWarning(DefaultTranslations.Translate("WALL_REBUILD"));
+            }
+            else
+            {
+                Logger.LogWarning(DefaultTranslations.Translate("WALL_REBUILD_DISABLED"));
+            }
         }
 
         public void ResetGame()
@@ -482,7 +542,7 @@ namespace NightFish.GunGame
             Logger.LogWarning(DefaultTranslations.Translate("VEH_CLR"));
             GenerateWeaponList();
             UnturnedChat.Say(DefaultTranslations.Translate("ROUND_START"), Color.magenta);
-            UnturnedChat.Say(DefaultTranslations.Translate("LVL_CHANGE",1), Color.cyan);
+            UnturnedChat.Say(DefaultTranslations.Translate("LVL_CHANGE", 1), Color.cyan);
             int seed = 0;
             foreach (SteamPlayer sp in Provider.clients)
             {
@@ -557,9 +617,9 @@ namespace NightFish.GunGame
                 return;
             if ((DateTime.Now - lastOPCheck).TotalMilliseconds > 300)
             {
-                if(ResetOnTime == true)
+                if (ResetOnTime == true)
                 {
-                    if(DateTime.Now > ResetTime)
+                    if (DateTime.Now > ResetTime)
                     {
                         ResetOnTime = false;
                         ResetGame();
@@ -628,7 +688,7 @@ namespace NightFish.GunGame
             if ((DateTime.Now - lastBorderCheck).TotalSeconds > 0.2)
             {
                 MagRemoveCount++;
-                if(MagRemoveCount > 20)
+                if (MagRemoveCount > 20)
                 {
                     foreach (SteamPlayer sp in Provider.clients)
                     {
@@ -662,7 +722,7 @@ namespace NightFish.GunGame
                     }
                 }
 
-                foreach(ulong u in deleteOP)
+                foreach (ulong u in deleteOP)
                 {
                     OP.Remove(u);
                     UnturnedChat.Say(DefaultTranslations.Translate("LOST_OP", UnturnedPlayer.FromCSteamID(new CSteamID(u)).DisplayName), Color.yellow);
@@ -670,9 +730,9 @@ namespace NightFish.GunGame
 
                 deleteOP.Clear();
 
-                foreach(ulong u in OPPlayers)
+                foreach (ulong u in OPPlayers)
                 {
-                    if(!OP.ContainsKey(u))
+                    if (!OP.ContainsKey(u))
                     {
                         deleteOP.Add(u);
                     }
@@ -752,7 +812,7 @@ namespace NightFish.GunGame
                                 UnturnedChat.Say(DefaultTranslations.Translate("GAME_RESET", ResetDelay.ToString()), Color.gray);
                             }
                         }
-                        else if(PlayerLevel < 0)
+                        else if (PlayerLevel < 0)
                         {
                             gungameLevels.Remove(player.CSteamID.m_SteamID);
                             gungameLevels.Add(player.CSteamID.m_SteamID, 0);
@@ -1067,18 +1127,25 @@ namespace NightFish.GunGame
     {
         public static void Shuffle<T>(this IList<T> list)
         {
-            RNGCryptoServiceProvider provider = new RNGCryptoServiceProvider();
-            int n = list.Count;
-            while (n > 1)
+            try
             {
-                byte[] box = new byte[1];
-                do provider.GetBytes(box);
-                while (!(box[0] < n * (Byte.MaxValue / n)));
-                int k = (box[0] % n);
-                n--;
-                T value = list[k];
-                list[k] = list[n];
-                list[n] = value;
+                RNGCryptoServiceProvider provider = new RNGCryptoServiceProvider();
+                int n = list.Count;
+                while (n > 1)
+                {
+                    byte[] box = new byte[1];
+                    do provider.GetBytes(box);
+                    while (!(box[0] < n * (Byte.MaxValue / n)));
+                    int k = (box[0] % n);
+                    n--;
+                    T value = list[k];
+                    list[k] = list[n];
+                    list[n] = value;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Error while shuffling array: " + ex.Message);
             }
         }
     }
