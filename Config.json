@@ -4,6 +4,10 @@
     "Desc_Hint": "",
     "Desc_Full": ""
   },
+  "Server": {
+    "VAC_Secure": true,
+    "BattlEye_Secure": true
+  },
   "Easy": {
     "Items": {
       "Spawn_Chance": 0.0,
