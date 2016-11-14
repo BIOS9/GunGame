@@ -33,8 +33,13 @@ namespace NightFish.GunGame
         double WallBarricadeHeight = 3.75;
 
         bool disableClearing = false;
-
         bool disableWallGen = false;
+        bool disableUnstick = false;
+
+        bool UseCustomSpawns = false;
+
+        int UnstickDelay = 10;
+        int UnstickCooldown = 120;
 
         int ResetDelay = 30;
 
@@ -50,6 +55,9 @@ namespace NightFish.GunGame
         List<ulong> OPPlayers = new List<ulong>();
         List<int> WeaponList = new List<int>();
         Dictionary<ulong, Vector3> RespawnList = new Dictionary<ulong, Vector3>();
+        Dictionary<ulong, DateTime> UnstickList = new Dictionary<ulong, DateTime>();
+        Dictionary<ulong, DateTime> UnstickCooldownList = new Dictionary<ulong, DateTime>();
+        Dictionary<string, Vector3> CustomSpawns = new Dictionary<string, Vector3>();
 
         DateTime ResetTime = DateTime.Now.AddMinutes(30);
         bool ResetOnTime = false;
@@ -88,6 +96,16 @@ namespace NightFish.GunGame
                     {"KILLSTREAK","{0} has a kill streak of {1}!"},
                     {"KILLSTREAK_END","{0} has ended {1}'s kill streak of {2}"},
                     {"WALL_REBUILD_DISABLED","Arena wall build disabled... Skipping..."},
+                    {"NO_UNSTICK", "Sorry, '/Unstick' is not enabled on this server!"},
+                    {"UNSTICKING", "You will be unstuck in {0} seconds..."},
+                    {"UNSTUCK", "You have been unstuck!"},
+                    {"UNSTICK_COOLDOWN", "You have to wait {0} seconds before you can use this again!"},
+                    {"SPAWN_ADD", "Spawnpoint '{3}' at {0}, {1}, {2} successfully added."},
+                    {"SPAWN_ADD_ERR_NAME", "Invalid arguments! Please specify a name for this spawnpoint: '/as MySpawnName'"},
+                    {"SPAWN_ADD_ERR_EXISTS", "Invalid arguments! A spawnpoint with this name already exists!"},
+                    {"SPAWN_DEL", "Spawnpoint '{0}' successfully deleted."},
+                    {"SPAWN_DEL_ERR_NAME", "Invalid arguments! Please specify the name of the spawn you want to delete: '/ds MySpawnName'"},
+                    {"SPAWN_DEL_ERR_EXISTS", "Invalid arguments! A spawn with that name does not exist!"},
                 };
             }
         }
@@ -124,13 +142,32 @@ namespace NightFish.GunGame
                 writer.WriteComment("The following setting will disable the generation of the arena wall. Players will still not be able to leave.");
                 writer.WriteElementString("DisableWall", disableWallGen.ToString());
                 writer.WriteEndElement();
+                writer.WriteStartElement("Unstick");
+                writer.WriteElementString("DisableUnstick", disableUnstick.ToString());
+                writer.WriteElementString("UnstickDelay", UnstickDelay.ToString());
+                writer.WriteElementString("UnstickCooldown", UnstickCooldown.ToString());
+                writer.WriteEndElement();
+                writer.WriteStartElement("Misc");
                 writer.WriteComment("The following setting will disable clearing barricades and structures. This setting should not be enabled while re-building walls is enabled because it will create walls on top of existing walls and cause lag.");
-                writer.WriteElementString("DisableClear", disableWallGen.ToString());
-
+                writer.WriteElementString("DisableClear", disableClearing.ToString());
+                writer.WriteEndElement();
                 writer.WriteStartElement("Weapons");
                 foreach (int w in weapons)
                 {
                     writer.WriteElementString("Weapon", w.ToString());
+                }
+                writer.WriteEndElement();
+
+                writer.WriteStartElement("CustomSpawnpoints");
+                writer.WriteElementString("UseCustomSpawnpoints", UseCustomSpawns.ToString());
+                foreach (KeyValuePair<string, Vector3> kvp in CustomSpawns)
+                {
+                    writer.WriteStartElement("CustomSpawn");
+                    writer.WriteElementString("Name", kvp.Key);
+                    writer.WriteElementString("X", kvp.Value.x.ToString());
+                    writer.WriteElementString("Y", kvp.Value.y.ToString());
+                    writer.WriteElementString("Z", kvp.Value.z.ToString());
+                    writer.WriteEndElement();
                 }
                 writer.WriteEndElement();
 
@@ -147,9 +184,13 @@ namespace NightFish.GunGame
             }
             else
             {
-                weapons = new List<int>();
+                bool ClearedWeapons = false;
                 using (XmlReader reader = XmlReader.Create(@"plugins\gungame\GunGameConfig.xml"))
                 {
+                    string CurrentSpawnName = "";
+                    double CurrentSpawnX = 0;
+                    double CurrentSpawnY = 0;
+
                     while (reader.Read())
                     {
                         if (reader.IsStartElement())
@@ -187,6 +228,11 @@ namespace NightFish.GunGame
                                 case "Weapon":
                                     if (reader.Read())
                                     {
+                                        if(!ClearedWeapons)
+                                        {
+                                            weapons = new List<int>();
+                                            ClearedWeapons = true;
+                                        }
                                         Logger.Log("Added weapon: " + reader.Value.Trim());
                                         weapons.Add(Convert.ToInt32(reader.Value.Trim()));
                                     }
@@ -247,6 +293,62 @@ namespace NightFish.GunGame
                                         disableClearing = Convert.ToBoolean(reader.Value.Trim());
                                     }
                                     break;
+                                case "DisableUnstick":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Disable unstick command: " + reader.Value.Trim());
+                                        disableUnstick = Convert.ToBoolean(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "UnstickDelay":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Unstick delay: " + reader.Value.Trim() + " seconds");
+                                        UnstickDelay = Convert.ToInt32(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "UnstickCooldown":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Unstick cooldown: " + reader.Value.Trim() + " seconds");
+                                        UnstickCooldown = Convert.ToInt32(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "UseCustomSpawnpoints":
+                                    if (reader.Read())
+                                    {
+                                        Logger.Log("Use custom spawnpoints: " + reader.Value.Trim());
+                                        UseCustomSpawns = Convert.ToBoolean(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "Name":
+                                    if (reader.Read())
+                                    {
+                                        CurrentSpawnName = Convert.ToString(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "X":
+                                    if (reader.Read())
+                                    {
+                                        CurrentSpawnX = Convert.ToDouble(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "Y":
+                                    if (reader.Read())
+                                    {
+                                        CurrentSpawnY = Convert.ToDouble(reader.Value.Trim());
+                                    }
+                                    break;
+                                case "Z":
+                                    if (reader.Read())
+                                    {
+                                        CustomSpawns.Add(CurrentSpawnName, new Vector3((float)CurrentSpawnX, (float)CurrentSpawnY, (float)Convert.ToDouble(reader.Value.Trim())));
+                                        Logger.Log("Custom spawn: " + CurrentSpawnName + " at: X:" + CurrentSpawnX + ", Y:" + CurrentSpawnY + ", Z:" + Convert.ToDouble(reader.Value.Trim()));
+                                        CurrentSpawnName = "";
+                                        CurrentSpawnX = 0;
+                                        CurrentSpawnY = 0;
+                                    }
+                                    break;
                             }
                         }
                     }
@@ -261,6 +363,17 @@ namespace NightFish.GunGame
                 {
                     Logger.LogError("North wall must be bigger than South wall! Please fix this error to continue!");
                     error = true;
+                }
+            }
+
+            saveXML(); //Used to update old config files while keeping original settings
+
+            if (UseCustomSpawns)
+            {
+                if(CustomSpawns.Count == 0)
+                {
+                    Logger.LogError("No custom spawn points set! Defaulting back to random spawns...");
+                    UseCustomSpawns = false;
                 }
             }
 
@@ -288,6 +401,28 @@ namespace NightFish.GunGame
             Rocket.Unturned.Events.UnturnedPlayerEvents.OnPlayerDeath -= PlayerDeath;
             Rocket.Unturned.Events.UnturnedPlayerEvents.OnPlayerRevive -= PlayerRespawn;
             U.Events.OnPlayerConnected -= PlayerJoin;
+        }
+
+        public int Rand(int minValue, int maxValue)
+        {
+            RNGCryptoServiceProvider _rng = new RNGCryptoServiceProvider();
+            if (minValue > maxValue)
+                throw new ArgumentOutOfRangeException("minValue");
+            if (minValue == maxValue) return minValue;
+            Int64 diff = maxValue - minValue;
+            while (true)
+            {
+                byte[] _uint32Buffer = new byte[4];
+                _rng.GetBytes(_uint32Buffer);
+                UInt32 rand = BitConverter.ToUInt32(_uint32Buffer, 0);
+
+                Int64 max = (1 + (Int64)UInt32.MaxValue);
+                Int64 remainder = max % diff;
+                if (rand < max - remainder)
+                {
+                    return (Int32)(minValue + (rand % diff));
+                }
+            }
         }
 
         public void PlayerDeath(UnturnedPlayer player, EDeathCause cause, ELimb limb, CSteamID murderer)
@@ -421,10 +556,28 @@ namespace NightFish.GunGame
         {
             if (error == true)
                 return;
-            System.Random r = new System.Random();
-            int x = r.Next((int)WestWall, (int)EastWall);
-            int z = r.Next((int)SouthWall, (int)NorthWall);
-            RespawnList.Add(player.CSteamID.m_SteamID, new Vector3(x, -10, z));
+            if (UseCustomSpawns)
+            {
+                Vector3 pos = new Vector3(0, 0, 0);
+                int index = Rand(0, CustomSpawns.Count);
+                int i = 0;
+                foreach(KeyValuePair<string, Vector3> kvp in CustomSpawns)
+                {
+                    if(i == index)
+                    {
+                        RespawnList.Add(player.CSteamID.m_SteamID, kvp.Value);
+                    }
+                    i++;
+                }
+            }
+            else
+            { 
+                System.Random r = new System.Random(DateTime.Now.Millisecond);
+                int x = r.Next((int)WestWall, (int)EastWall);
+                int z = r.Next((int)SouthWall, (int)NorthWall);
+                RespawnList.Add(player.CSteamID.m_SteamID, new Vector3(x, -10, z));
+            }
+
             int playerLevel = 0;
             try
             {
@@ -617,6 +770,60 @@ namespace NightFish.GunGame
                 return;
             if ((DateTime.Now - lastOPCheck).TotalMilliseconds > 300)
             {
+                List<ulong> deleteList = new List<ulong>();
+                int seed = 0;
+                foreach(KeyValuePair<ulong, DateTime> unstickers in UnstickList)
+                {
+                    if(unstickers.Value < DateTime.Now)
+                    {
+                        UnturnedPlayer player = UnturnedPlayer.FromCSteamID(new CSteamID(unstickers.Key));
+                        if (UseCustomSpawns)
+                        {
+                            Vector3 pos = new Vector3(0, 0, 0);
+                            int index = Rand(0, CustomSpawns.Count);
+                            int i = 0;
+                            foreach (KeyValuePair<string, Vector3> kvp in CustomSpawns)
+                            {
+                                if (i == index)
+                                {
+                                    RespawnList.Add(player.CSteamID.m_SteamID, kvp.Value);
+                                }
+                                i++;
+                            }
+                        }
+                        else
+                        {
+                            System.Random r = new System.Random(DateTime.Now.Millisecond + seed);
+                            int x = r.Next((int)WestWall, (int)EastWall);
+                            int z = r.Next((int)SouthWall, (int)NorthWall);
+                            RespawnList.Add(player.CSteamID.m_SteamID, new Vector3(x, -10, z));
+                        }
+                        UnturnedChat.Say(player, DefaultTranslations.Translate("UNSTUCK"), Color.green);
+                        deleteList.Add(unstickers.Key);
+                        seed++;
+                    }
+                }
+
+                foreach (ulong delete in deleteList)
+                {
+                    UnstickList.Remove(delete);
+                }
+                deleteList.Clear();
+
+                foreach (KeyValuePair<ulong, DateTime> USCooldown in UnstickCooldownList)
+                {
+                    if (USCooldown.Value < DateTime.Now)
+                    {
+                        UnturnedPlayer player = UnturnedPlayer.FromCSteamID(new CSteamID(USCooldown.Key));
+                        deleteList.Add(USCooldown.Key);
+                    }
+                }
+
+                foreach (ulong delete in deleteList)
+                {
+                    UnstickCooldownList.Remove(delete);
+                }
+
                 if (ResetOnTime == true)
                 {
                     if (DateTime.Now > ResetTime)
@@ -1117,6 +1324,77 @@ namespace NightFish.GunGame
         public void ExecuteCommandReset(IRocketPlayer caller, string[] parameters)
         {
             ResetGame();
+        }
+
+        [RocketCommand("unstick", "Respawns a player if they are stuck", "", AllowedCaller.Player)] //kills player if they are stuck somewhere
+        public void ExecuteCommandUnstick(IRocketPlayer caller, string[] parameters)
+        {
+            if(!disableUnstick)
+            {
+                UnturnedPlayer player = (UnturnedPlayer)caller;
+                if (!UnstickCooldownList.ContainsKey(player.CSteamID.m_SteamID))
+                {
+                    UnstickList.Add(player.CSteamID.m_SteamID, DateTime.Now.AddSeconds(UnstickDelay));
+                    UnstickCooldownList.Add(player.CSteamID.m_SteamID, DateTime.Now.AddSeconds(UnstickCooldown));
+                    UnturnedChat.Say(caller, DefaultTranslations.Translate("UNSTICKING", UnstickDelay), Color.green);
+                }
+                else
+                {
+                    UnturnedChat.Say(caller, DefaultTranslations.Translate("UNSTICK_COOLDOWN", Math.Round((UnstickCooldownList[player.CSteamID.m_SteamID] - DateTime.Now).TotalSeconds)), Color.yellow);
+                }
+            }
+            else
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("NO_UNSTICK"), Color.yellow);
+            }
+        }
+
+        [RocketCommandAlias("as")]
+        [RocketCommand("addspawn", "Adds a spawnponint to the list of custom points", "", AllowedCaller.Player)] //Adds a spawnponint to the list of custom points
+        public void ExecuteCommandSpawnpoint(IRocketPlayer caller, string[] parameters)
+        {
+            if(parameters.Length != 1)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("SPAWN_ADD_ERR_NAME"), Color.yellow);
+            }
+            else
+            {
+                if (CustomSpawns.ContainsKey(parameters[0]))
+                {
+                    UnturnedChat.Say(caller, DefaultTranslations.Translate("SPAWN_ADD_ERR_EXISTS"), Color.yellow);
+                }
+                else
+                {
+                    Vector3 p = ((UnturnedPlayer)caller).Position;
+                    CustomSpawns.Add(parameters[0], p);
+                    UnturnedChat.Say(caller, DefaultTranslations.Translate("SPAWN_ADD", p.x, p.y, p.z, parameters[0]));
+                    saveXML();
+                }
+            }
+        }
+
+        [RocketCommandAlias("ds")]
+        [RocketCommandAlias("delspawn")]
+        [RocketCommand("deletespawn", " a spawnponint to the list of custom points", "", AllowedCaller.Player)] //Adds a spawnponint to the list of custom points
+        public void ExecuteCommandDelspawnpoint(IRocketPlayer caller, string[] parameters)
+        {
+            if (parameters.Length != 1)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("SPAWN_DEL_ERR_NAME"), Color.yellow);
+            }
+            else
+            {
+                if (!CustomSpawns.ContainsKey(parameters[0]))
+                {
+                    UnturnedChat.Say(caller, DefaultTranslations.Translate("SPAWN_DEL_ERR_EXISTS"), Color.yellow);
+                }
+                else
+                {
+                    CustomSpawns.Remove(parameters[0]);
+                    UnturnedChat.Say(caller, DefaultTranslations.Translate("SPAWN_DEL", parameters[0]));
+                    saveXML();
+                }
+            }
         }
 
         #endregion
