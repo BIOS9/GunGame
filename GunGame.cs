@@ -36,6 +36,11 @@ namespace NightFish.GunGame
         bool disableWallGen = false;
         bool disableUnstick = false;
 
+        bool DisableGungame = false;
+        bool DedicatedMode = true;
+
+        bool UseRandomOrder = true;
+
         bool UseCustomSpawns = false;
 
         int UnstickDelay = 10;
@@ -83,6 +88,7 @@ namespace NightFish.GunGame
                     {"LVL_CHANGE", "You are on level {0}"},
                     {"INV_ERR", "There was an error clearing {0}'s inventory. Here is the error: {1}"},
                     {"ROUND_START", "ROUND STARTED!"},
+                    {"ROUND_END", "ROUND ENDED!"},
                     {"VEH_CLR", "Cleared Vehicles"},
                     {"STRUCT_CLR", "Cleared Structures"},
                     {"WP_LIST_GEN", "Generated weapons list..."},
@@ -106,6 +112,10 @@ namespace NightFish.GunGame
                     {"SPAWN_DEL", "Spawnpoint '{0}' successfully deleted."},
                     {"SPAWN_DEL_ERR_NAME", "Invalid arguments! Please specify the name of the spawn you want to delete: '/ds MySpawnName'"},
                     {"SPAWN_DEL_ERR_EXISTS", "Invalid arguments! A spawn with that name does not exist!"},
+                    {"GUNGAME_DISABLED", "Sorry, Gun Game is currently disabled or not running!"},
+                    {"GUNGAME_RUNNING", "Gun Game is already running, use '/ggstop' to stop the round."},
+                    {"GUNGAME_STOPPED", "Gun Game is not already running, use '/ggstart' to start a round."},
+                    {"GUNGAME_DEDICATED", "Gun Game must be running in non-dedicated mode to use this command!"},
                 };
             }
         }
@@ -156,6 +166,7 @@ namespace NightFish.GunGame
                 {
                     writer.WriteElementString("Weapon", w.ToString());
                 }
+                writer.WriteElementString("UseRandomOrder", UseRandomOrder.ToString());
                 writer.WriteEndElement();
 
                 writer.WriteStartElement("CustomSpawnpoints");
@@ -349,6 +360,13 @@ namespace NightFish.GunGame
                                         CurrentSpawnY = 0;
                                     }
                                     break;
+                                case "UseRandomOrder":
+                                    if(reader.Read())
+                                    {
+                                        Logger.Log("Random Weapon Order: " + Convert.ToBoolean(reader.Value.Trim()));
+                                        UseRandomOrder = Convert.ToBoolean(reader.Value.Trim());
+                                    }
+                                    break;
                             }
                         }
                     }
@@ -427,7 +445,7 @@ namespace NightFish.GunGame
 
         public void PlayerDeath(UnturnedPlayer player, EDeathCause cause, ELimb limb, CSteamID murderer)
         {
-            if (error == true)
+            if (error || DisableGungame)
                 return;
             OP.Remove(player.CSteamID.m_SteamID);
             bool killedByPlayer = false;
@@ -554,7 +572,7 @@ namespace NightFish.GunGame
 
         public void PlayerRespawn(UnturnedPlayer player, Vector3 position, byte angle)
         {
-            if (error == true)
+            if (error || DisableGungame)
                 return;
             if (UseCustomSpawns)
             {
@@ -591,29 +609,57 @@ namespace NightFish.GunGame
 
         public void PlayerJoin(UnturnedPlayer player)
         {
-            if (error == true)
+            if (error)
                 return;
             ClearClothes(player);
             ClearInv(player);
-            System.Random r = new System.Random();
-            int x = r.Next((int)WestWall, (int)EastWall);
-            int z = r.Next((int)SouthWall, (int)NorthWall);
-            RespawnList.Add(player.CSteamID.m_SteamID, new Vector3(x, -10, z));
+
+            if (UseCustomSpawns)
+            {
+                Vector3 pos = new Vector3(0, 0, 0);
+                int index = Rand(0, CustomSpawns.Count);
+                int i = 0;
+                foreach (KeyValuePair<string, Vector3> kvp in CustomSpawns)
+                {
+                    if (i == index)
+                    {
+                        try
+                        { 
+                            RespawnList.Add(player.CSteamID.m_SteamID, kvp.Value);
+                        }
+                        catch { }
+                    }
+                    i++;
+                }
+            }
+            else
+            {
+                System.Random r = new System.Random(DateTime.Now.Millisecond);
+                int x = r.Next((int)WestWall, (int)EastWall);
+                int z = r.Next((int)SouthWall, (int)NorthWall);
+                try
+                { 
+                    RespawnList.Add(player.CSteamID.m_SteamID, new Vector3(x, -10, z));
+                }
+                catch { }
+            }
+/*
             int playerLevel = 0;
             try
             {
                 playerLevel = gungameLevels[player.CSteamID.m_SteamID];
             }
             catch
-            { }
+            { }*/
         }
 
         public void GenerateWeaponList()
         {
-            if (error == true)
+            if (error)
                 return;
             WeaponList = weapons;
-            WeaponList.Shuffle();
+            if(UseRandomOrder)
+                WeaponList.Shuffle();
 
             Console.ForegroundColor = ConsoleColor.DarkMagenta;
             Console.WriteLine(DefaultTranslations.Translate("WP_LIST_GEN"));
@@ -622,7 +668,7 @@ namespace NightFish.GunGame
 
         public void RebuildWall()
         {
-            if (error == true)
+            if (error)
                 return;
             if (!disableClearing)
             {
@@ -663,7 +709,7 @@ namespace NightFish.GunGame
 
         public void ResetGame()
         {
-            if (error == true)
+            if (error)
                 return;
             ResetTime = DateTime.Now.AddMinutes(30);
             Winner = 0;
@@ -700,17 +746,42 @@ namespace NightFish.GunGame
             foreach (SteamPlayer sp in Provider.clients)
             {
                 UnturnedPlayer player = UnturnedPlayer.FromSteamPlayer(sp);
-                System.Random r = new System.Random((int)DateTime.Now.Ticks + seed);
-                int x = r.Next((int)WestWall, (int)EastWall);
-                int z = r.Next((int)SouthWall, (int)NorthWall);
-                RespawnList.Add(player.CSteamID.m_SteamID, new Vector3(x, -10, z));
+                if (UseCustomSpawns)
+                {
+                    Vector3 pos = new Vector3(0, 0, 0);
+                    int index = Rand(0, CustomSpawns.Count);
+                    int i = 0;
+                    foreach (KeyValuePair<string, Vector3> kvp in CustomSpawns)
+                    {
+                        if (i == index)
+                        {
+                            try
+                            {
+                                RespawnList.Add(player.CSteamID.m_SteamID, kvp.Value);
+                            }
+                            catch { }
+                        }
+                        i++;
+                    }
+                }
+                else
+                {
+                    System.Random r = new System.Random(DateTime.Now.Millisecond + seed);
+                    int x = r.Next((int)WestWall, (int)EastWall);
+                    int z = r.Next((int)SouthWall, (int)NorthWall);
+                    try
+                    { 
+                    RespawnList.Add(player.CSteamID.m_SteamID, new Vector3(x, -10, z));
+                    }
+                    catch { }
+                }
                 seed++;
             }
         }
 
         public void MaxSkills(UnturnedPlayer player)
         {
-            if (error == true)
+            if (error)
                 return;
             player.SetSkillLevel(Rocket.Unturned.Skills.UnturnedSkill.Agriculture, 255);
             player.SetSkillLevel(Rocket.Unturned.Skills.UnturnedSkill.Cooking, 255);
@@ -738,7 +809,7 @@ namespace NightFish.GunGame
 
         public void MinSkills(UnturnedPlayer player)
         {
-            if (error == true)
+            if (error)
                 return;
             player.SetSkillLevel(Rocket.Unturned.Skills.UnturnedSkill.Agriculture, 0);
             player.SetSkillLevel(Rocket.Unturned.Skills.UnturnedSkill.Cooking, 0);
@@ -766,7 +837,7 @@ namespace NightFish.GunGame
 
         void FixedUpdate()
         {
-            if (error == true)
+            if (error || DisableGungame)
                 return;
             if ((DateTime.Now - lastOPCheck).TotalMilliseconds > 300)
             {
@@ -1009,14 +1080,39 @@ namespace NightFish.GunGame
                         }
                         else if (PlayerLevel > WeaponList.Count)
                         {
-                            if (GameOver == false)
+                            if (!DedicatedMode)
                             {
-                                GameOver = true;
+                                DisableGungame = true;
+                                foreach (SteamPlayer sp1 in Provider.clients)
+                                {
+                                    UnturnedPlayer p1 = UnturnedPlayer.FromSteamPlayer(sp1);
+                                    ClearInv(p1);
+                                    ClearClothes(p1);
+                                    p1.Heal(100);
+                                }
+
+                                if (!disableClearing)
+                                {
+                                    BarricadeManager.askClearAllBarricades();
+                                    StructureManager.askClearAllStructures();
+                                    Logger.LogWarning(DefaultTranslations.Translate("BARRIC_CLR"));
+                                    Logger.LogWarning(DefaultTranslations.Translate("STRUCT_CLR"));
+                                }
                                 Winner = player.CSteamID.m_SteamID;
-                                UnturnedChat.Say(DefaultTranslations.Translate("GAME_WIN", player.DisplayName), Color.blue);
-                                ResetTime = DateTime.Now.AddSeconds(ResetDelay);
-                                ResetOnTime = true;
-                                UnturnedChat.Say(DefaultTranslations.Translate("GAME_RESET", ResetDelay.ToString()), Color.gray);
+                                UnturnedChat.Say(DefaultTranslations.Translate("GAME_WIN", player.DisplayName), Color.cyan);
+                                UnturnedChat.Say(DefaultTranslations.Translate("ROUND_END"), Color.magenta);
+                            }
+                            else
+                            {
+                                if (GameOver == false)
+                                {
+                                    GameOver = true;
+                                    Winner = player.CSteamID.m_SteamID;
+                                    UnturnedChat.Say(DefaultTranslations.Translate("GAME_WIN", player.DisplayName), Color.cyan);
+                                    ResetTime = DateTime.Now.AddSeconds(ResetDelay);
+                                    ResetOnTime = true;
+                                    UnturnedChat.Say(DefaultTranslations.Translate("GAME_RESET", ResetDelay.ToString()), Color.gray);
+                                }
                             }
                         }
                         else if (PlayerLevel < 0)
@@ -1084,6 +1180,7 @@ namespace NightFish.GunGame
                         }
                         else
                         {
+                            player.Heal(20);
                             if (player.CSteamID.m_SteamID != Winner)
                             {
                                 ClearInv(player);
@@ -1106,7 +1203,7 @@ namespace NightFish.GunGame
 
         public void ClearInv(UnturnedPlayer player)
         {
-            if (error == true)
+            if (error)
                 return;
             try
             {
@@ -1129,7 +1226,7 @@ namespace NightFish.GunGame
 
         public void ClearClothes(UnturnedPlayer player)
         {
-            if (error == true)
+            if (error)
                 return;
             try
             {
@@ -1183,6 +1280,12 @@ namespace NightFish.GunGame
         [RocketCommandAlias("ew")]
         public void ExecuteCommandMaxx(IRocketPlayer caller, string[] parameters)
         {
+            if(DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
             try
             {
 
@@ -1209,6 +1312,12 @@ namespace NightFish.GunGame
         [RocketCommandAlias("ww")]
         public void ExecuteCommandMinx(IRocketPlayer caller, string[] parameters)
         {
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
             try
             {
                 int Num = Convert.ToInt32(parameters[0]);
@@ -1234,6 +1343,12 @@ namespace NightFish.GunGame
         [RocketCommandAlias("nw")]
         public void ExecuteCommandMaxz(IRocketPlayer caller, string[] parameters)
         {
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
             try
             {
                 int Num = Convert.ToInt32(parameters[0]);
@@ -1259,6 +1374,12 @@ namespace NightFish.GunGame
         [RocketCommandAlias("sw")]
         public void ExecuteCommandMinZ(IRocketPlayer caller, string[] parameters)
         {
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
             try
             {
                 int Num = Convert.ToInt32(parameters[0]);
@@ -1285,6 +1406,12 @@ namespace NightFish.GunGame
         [RocketCommand("op", "", "", AllowedCaller.Player)] //makes the caller have the OP status in game
         public void ExecuteCommandOP(IRocketPlayer caller, string[] parameters)
         {
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
             if (!OP.ContainsKey(((UnturnedPlayer)caller).CSteamID.m_SteamID))
             {
                 OP.Add(((UnturnedPlayer)caller).CSteamID.m_SteamID, DateTime.Now.AddSeconds(20));
@@ -1294,6 +1421,12 @@ namespace NightFish.GunGame
         [RocketCommand("lvld", "Removes a level", "", AllowedCaller.Player)] //decreases gun game level of caller
         public void ExecuteCommandL(IRocketPlayer caller, string[] parameters)
         {
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
             UnturnedPlayer player = (UnturnedPlayer)caller;
             int pastLevel = 0;
             try
@@ -1309,6 +1442,12 @@ namespace NightFish.GunGame
         [RocketCommand("lvlu", "Gives a level.", "", AllowedCaller.Player)] //increases gun game level of caller
         public void ExecuteuommandK(IRocketPlayer caller, string[] parameters)
         {
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
             UnturnedPlayer player = (UnturnedPlayer)caller;
             int pastLevel = 0;
             try
@@ -1323,13 +1462,25 @@ namespace NightFish.GunGame
         [RocketCommand("reset", "Reset the gungame server", "", AllowedCaller.Both)] //resets the gun game
         public void ExecuteCommandReset(IRocketPlayer caller, string[] parameters)
         {
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
             ResetGame();
         }
 
         [RocketCommand("unstick", "Respawns a player if they are stuck", "", AllowedCaller.Player)] //kills player if they are stuck somewhere
         public void ExecuteCommandUnstick(IRocketPlayer caller, string[] parameters)
         {
-            if(!disableUnstick)
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
+            if (!disableUnstick)
             {
                 UnturnedPlayer player = (UnturnedPlayer)caller;
                 if (!UnstickCooldownList.ContainsKey(player.CSteamID.m_SteamID))
@@ -1353,7 +1504,13 @@ namespace NightFish.GunGame
         [RocketCommand("addspawn", "Adds a spawnponint to the list of custom points", "", AllowedCaller.Player)] //Adds a spawnponint to the list of custom points
         public void ExecuteCommandSpawnpoint(IRocketPlayer caller, string[] parameters)
         {
-            if(parameters.Length != 1)
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
+            if (parameters.Length != 1)
             {
                 UnturnedChat.Say(caller, DefaultTranslations.Translate("SPAWN_ADD_ERR_NAME"), Color.yellow);
             }
@@ -1375,9 +1532,15 @@ namespace NightFish.GunGame
 
         [RocketCommandAlias("ds")]
         [RocketCommandAlias("delspawn")]
-        [RocketCommand("deletespawn", " a spawnponint to the list of custom points", "", AllowedCaller.Player)] //Adds a spawnponint to the list of custom points
+        [RocketCommand("deletespawn", "Removes a spawnponint from the list of custom points", "", AllowedCaller.Player)] //Removes a spawnponint from the list of custom points
         public void ExecuteCommandDelspawnpoint(IRocketPlayer caller, string[] parameters)
         {
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DISABLED"), Color.yellow);
+                return;
+            }
+
             if (parameters.Length != 1)
             {
                 UnturnedChat.Say(caller, DefaultTranslations.Translate("SPAWN_DEL_ERR_NAME"), Color.yellow);
@@ -1395,6 +1558,88 @@ namespace NightFish.GunGame
                     saveXML();
                 }
             }
+        }
+
+        [RocketCommandAlias("ggstart")]
+        [RocketCommand("gungamestart", "Starts a non-dedicated Gun Game round", "", AllowedCaller.Both)] //Starts a non-dedicated Gun Game round
+        public void ExecuteCommandGungamestart(IRocketPlayer caller, string[] parameters)
+        {
+            if (DedicatedMode)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DEDICATED"), Color.yellow);
+                return;
+            }
+
+            if (!DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_RUNNING"), Color.yellow);
+                return;
+            }
+
+            foreach(SteamPlayer sp in Provider.clients)
+            {
+                try
+                {
+                    DisableGungame = false;
+                    UnturnedPlayer player = UnturnedPlayer.FromSteamPlayer(sp);
+                    player.GiveItem(new Item(121, true));
+                    Items i = new Items(1);
+                    i.addItem(0, 0, 0, new Item(121, true));
+                    player.Inventory.replaceItems(1, i);
+                    ResetGame();
+                }
+                catch(Exception ex)
+                {
+                    Logger.LogError("Error enforcing start task for: " + sp.playerID + " Error: " + ex.Message);
+                }
+            }
+            
+            
+        }
+
+        [RocketCommandAlias("ggstop")]
+        [RocketCommand("gungamestop", "Stop a non-dedicated Gun Game round", "", AllowedCaller.Both)] //Stops a non-dedicated Gun Game round
+        public void ExecuteCommandGungamestop(IRocketPlayer caller, string[] parameters)
+        {
+            if(DedicatedMode)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_DEDICATED"), Color.yellow);
+                return;
+            }
+
+            if (DisableGungame)
+            {
+                UnturnedChat.Say(caller, DefaultTranslations.Translate("GUNGAME_STOPPED"), Color.yellow);
+                return;
+            }
+
+            DisableGungame = true;
+            foreach(SteamPlayer sp in Provider.clients)
+            {
+                try
+                {
+                    UnturnedPlayer player = UnturnedPlayer.FromSteamPlayer(sp);
+                    ClearInv(player);
+                    ClearClothes(player);
+                    player.Heal(100);
+                    MinSkills(player);
+                    player.Inventory.removeItem(0, 0);
+                    player.Inventory.removeItem(1, 0);                  
+                }
+                catch(Exception ex)
+                {
+                    Logger.LogError("Error enforcing stop task for: " + sp.playerID + " Error: " + ex.Message);
+                }
+            }
+
+            if (!disableClearing)
+            {
+                BarricadeManager.askClearAllBarricades();
+                StructureManager.askClearAllStructures();
+                Logger.LogWarning(DefaultTranslations.Translate("BARRIC_CLR"));
+                Logger.LogWarning(DefaultTranslations.Translate("STRUCT_CLR"));
+            }
+            UnturnedChat.Say(DefaultTranslations.Translate("ROUND_END"), Color.magenta);
         }
 
         #endregion
