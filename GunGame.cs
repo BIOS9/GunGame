@@ -677,6 +677,15 @@ namespace NightFish.GunGame
                 case EDeathCause.PUNCH:
                     killedByPlayer = true;
                     break;
+                case EDeathCause.CHARGE:
+                    killedByPlayer = true;
+                    break;
+                case EDeathCause.LANDMINE:
+                    killedByPlayer = true;
+                    break;
+                case EDeathCause.MISSILE:
+                    killedByPlayer = true;
+                    break;
             }
 
             if (killedByPlayer)
